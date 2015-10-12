@@ -250,23 +250,29 @@ void Central2D<Physics, Limiter>::compute_fg_speeds(real* cxy)
  * In order to advance the time step, we also need to estimate
  * derivatives of the fluxes and the solution values at each cell.
  * In order to maintain stability, we apply a limiter here.
+ * 
+ * The current solution does a little extra work on ghost cells,
+ * but has the advantage that the loop structure is simple enough
+ * for the vectorizer to get the point.
  */
 
 template <class Physics, class Limiter>
 void Central2D<Physics, Limiter>::limited_derivs()
 {
-    for (int k = 0; k < nfield; ++k) {
-        for (int iy = 1; iy < ny_all-1; ++iy)
-            for (int ix = 1; ix < nx_all-1; ++ix) {
+    int hi = nfield * (ny_all-1) * nx_all;
+    float* RESTRICT ux0 = &ux_[0];
+    float* RESTRICT uy0 = &uy_[0];
+    float* RESTRICT fx0 = &fx_[0];
+    float* RESTRICT gy0 = &gy_[0];
 
-                // x derivs
-                ux(k,ix,iy) = Limiter::limdiff(u(k,ix-1,iy), u(k,ix,iy), u(k,ix+1,iy));
-                fx(k,ix,iy) = Limiter::limdiff(f(k,ix-1,iy), f(k,ix,iy), f(k,ix+1,iy));
+    for (int i = ny_all; i < hi; ++i) {
+        // x derivs
+        ux0[i] = Limiter::limdiff(u_[i-1], u_[i], u_[i+1]);
+        fx0[i] = Limiter::limdiff(f_[i-1], f_[i], f_[i+1]);
 
-                // y derivs
-                uy(k,ix,iy) = Limiter::limdiff(u(k,ix,iy-1), u(k,ix,iy), u(k,ix,iy+1));
-                gy(k,ix,iy) = Limiter::limdiff(g(k,ix,iy-1), g(k,ix,iy), g(k,ix,iy+1));
-            }
+        // y derivs
+        uy0[i] = Limiter::limdiff(u_[i-nx_all], u_[i], u_[i+nx_all]);
+        gy0[i] = Limiter::limdiff(g_[i-nx_all], g_[i], g_[i+nx_all]);
     }
 }
 

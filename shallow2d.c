@@ -33,6 +33,9 @@ void shallow2dv_flux(float* restrict fh,
 {
     memcpy(fh, hu, ncell * sizeof(float));
     memcpy(gh, hv, ncell * sizeof(float));
+#ifdef _OPENMP
+#pragma omp for
+#endif
     for (int i = 0; i < ncell; ++i) {
         float hi = h[i], hui = hu[i], hvi = hv[i];
         float inv_h = 1/hi;

@@ -221,6 +221,7 @@ int run_sim(lua_State* L)
     viz_frame(viz, sim);
 
     double tcompute = 0;
+
     for (int i = 0; i < frames; ++i) {
 #ifdef _OPENMP
         double t0 = omp_get_wtime();
@@ -270,6 +271,12 @@ int main(int argc, char** argv)
 
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
+    
+#ifdef _OPENMP
+#pragma omp parallel
+    printf("Hello, openmp\n\n");
+#endif
+    
     lua_register(L, "simulate", run_sim);
 
     lua_newtable(L);

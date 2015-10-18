@@ -392,7 +392,6 @@ int central2d_xrun(float* restrict u, float* restrict v,
     // This is where the omp for should start
     // Instead of update one loop, this should update k loops
     // And in the end, the loop will sync for all the ghost cells
-
         // Maybe keep the CFL condition and go on?
         central2d_step(u, v, scratch, f, g,
                        0, nx, ny, ng,

@@ -17,25 +17,25 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
                             int nfield, flux_t flux, speed_t speed,
                             float cfl)
 {
-    int ng = 3;
+    int ng = 3; // # of ghost cells
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
-    sim->nx = nx;
+    sim->nx = nx; // dimension size in x
     sim->ny = ny;
-    sim->ng = ng;
-    sim->nfield = nfield;
-    sim->dx = w/nx;
+    sim->ng = ng; // number of ghost cells
+    sim->nfield = nfield; // each vector has three components
+    sim->dx = w/nx; // Grid size in x
     sim->dy = h/ny;
-    sim->flux = flux;
-    sim->speed = speed;
-    sim->cfl = cfl;
+    sim->flux = flux; // flux ???
+    sim->speed = speed; // speed ???
+    sim->cfl = cfl; // CFL prefix coefficient
 
-    int nx_all = nx + 2*ng;
+    int nx_all = nx + 2*ng; // ghost cells on each side to avoid sync
     int ny_all = ny + 2*ng;
-    int nc = nx_all * ny_all;
-    int N  = nfield * nc;
-    sim->u  = (float*) malloc((4*N + 6*nx_all)* sizeof(float));
-    sim->v  = sim->u +   N;
+    int nc = nx_all * ny_all; // entire space
+    int N  = nfield * nc; // how many entries for each vector
+    sim->u  = (float*) malloc((4*N + 6*nx_all)* sizeof(float)); // allocate all space,not quite sure what the 6*nx_all are for (scratch? what is it?)
+    sim->v  = sim->u +   N; // storage space for half step grid
     sim->f  = sim->u + 2*N;
     sim->g  = sim->u + 3*N;
     sim->scratch = sim->u + 4*N;
@@ -80,28 +80,29 @@ void copy_subgrid(float* restrict dst,
                   const float* restrict src,
                   int nx, int ny, int stride)
 {
+    // from src, copy nx * ny date subblock to dst.
     for (int iy = 0; iy < ny; ++iy)
         for (int ix = 0; ix < nx; ++ix)
-            dst[iy*stride+ix] = src[iy*stride+ix];
+            dst[iy*stride+ix] = src[iy*stride+ix]; // Variable stride is used to accomodate the existence of ghost cells in the data
 }
 
 void central2d_periodic(float* restrict u,
                         int nx, int ny, int ng, int nfield)
 {
     // Stride and number per field
-    int s = nx + 2*ng;
-    int field_stride = (ny+2*ng)*s;
+    int s = nx + 2*ng; // the dimension size in x when ghost cells are present
+    int field_stride = (ny+2*ng)*s; // the step size in y to cross the one subdomain
 
     // Offsets of left, right, top, and bottom data blocks and ghost blocks
     int l = nx,   lg = 0;
     int r = ng,   rg = nx+ng;
     int b = ny*s, bg = 0;
-    int t = ng*s, tg = (nx+ng)*s;
+    int t = ng*s, tg = (nx+ng)*s; // should it be tg = (ny+ng)*s ? It doesn't matter for now because nx = ny
 
     // Copy data into ghost cells on each side
     for (int k = 0; k < nfield; ++k) {
         float* uk = u + k*field_stride;
-        copy_subgrid(uk+lg, uk+l, ng, ny+2*ng, s);
+        copy_subgrid(uk+lg, uk+l, ng, ny+2*ng, s); // for periodic condition update
         copy_subgrid(uk+rg, uk+r, ng, ny+2*ng, s);
         copy_subgrid(uk+tg, uk+t, nx+2*ng, ng, s);
         copy_subgrid(uk+bg, uk+b, nx+2*ng, ng, s);
@@ -370,6 +371,9 @@ int central2d_xrun(float* restrict u, float* restrict v,
                    int nfield, flux_t flux, speed_t speed,
                    float tfinal, float dx, float dy, float cfl)
 {
+    // OMP session should start here
+    // sub-domain parallel
+
     int nstep = 0;
     int nx_all = nx + 2*ng;
     int ny_all = ny + 2*ng;
@@ -377,13 +381,19 @@ int central2d_xrun(float* restrict u, float* restrict v,
     float t = 0;
     while (!done) {
         float cxy[2] = {1.0e-15f, 1.0e-15f};
-        central2d_periodic(u, nx, ny, ng, nfield);
-        speed(cxy, u, nx_all * ny_all, nx_all * ny_all);
+        central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
+        speed(cxy, u, nx_all * ny_all, nx_all * ny_all); // speed?
         float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
         if (t + 2*dt >= tfinal) {
             dt = (tfinal-t)/2;
             done = true;
         }
+
+    // This is where the omp for should start
+    // Instead of update one loop, this should update k loops
+    // And in the end, the loop will sync for all the ghost cells
+
+        // Maybe keep the CFL condition and go on?
         central2d_step(u, v, scratch, f, g,
                        0, nx, ny, ng,
                        nfield, flux, speed,
@@ -395,6 +405,8 @@ int central2d_xrun(float* restrict u, float* restrict v,
                        dt, dx, dy);
         t += 2*dt;
         nstep += 2;
+
+    // The omp for loop will end here and then it should get a sync for the ghost cells
     }
     return nstep;
 }

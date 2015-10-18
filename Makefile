@@ -13,7 +13,7 @@
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Darwin)
-PLATFORM=icc-mac
+PLATFORM=icc
 else
 PLATFORM=icc
 endif

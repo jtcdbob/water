@@ -17,7 +17,7 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
                             int nfield, flux_t flux, speed_t speed,
                             float cfl)
 {
-    int ng = 3; // # of ghost cells
+    int ng = 18; // # of ghost cells
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
     sim->nx = nx; // dimension size in x
@@ -384,28 +384,27 @@ int central2d_xrun(float* restrict u, float* restrict v,
         central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
         speed(cxy, u, nx_all * ny_all, nx_all * ny_all); // speed?
         float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
-        if (t + 2*dt >= tfinal) {
-            dt = (tfinal-t)/2;
-            done = true;
+
+        // For loops
+        int it;
+        int iter = 3;
+        for(it = 0; it < iter; it ++){
+            if (t + 2*dt >= tfinal) {
+                dt = (tfinal-t)/2;
+                done = true;
+            }
+            central2d_step(u, v, scratch, f, g,
+                           0, nx, ny, ng,
+                           nfield, flux, speed,
+                           dt, dx, dy);
+            //central2d_periodic(u, nx, ny, ng, nfield);
+            central2d_step(u, v, scratch, f, g,
+                           1, nx, ny, ng,
+                           nfield, flux, speed,
+                           dt, dx, dy);
+            t += 2*dt;
+            nstep += 2;
         }
-
-    // This is where the omp for should start
-    // Instead of update one loop, this should update k loops
-    // And in the end, the loop will sync for all the ghost cells
-        // Maybe keep the CFL condition and go on?
-        central2d_step(u, v, scratch, f, g,
-                       0, nx, ny, ng,
-                       nfield, flux, speed,
-                       dt, dx, dy);
-        central2d_periodic(u, nx, ny, ng, nfield);
-        central2d_step(u, v, scratch, f, g,
-                       1, nx, ny, ng,
-                       nfield, flux, speed,
-                       dt, dx, dy);
-        t += 2*dt;
-        nstep += 2;
-
-    // The omp for loop will end here and then it should get a sync for the ghost cells
     }
     return nstep;
 }
@@ -418,4 +417,57 @@ int central2d_run(central2d_t* sim, float tfinal)
                           sim->nx, sim->ny, sim->ng,
                           sim->nfield, sim->flux, sim->speed,
                           tfinal, sim->dx, sim->dy, sim->cfl);
+}
+
+// My own function
+central2d_t* central2d_copy_subdomain(central2d_t* sim, int index, int ndomain)
+{
+        int new_ny; // The size of subdomain.
+        int subsize = ceil(sim->ny / ndomain);
+        if(index < ndomain - 1) new_ny = subsize;
+        else new_ny = sim->ny - (ndomain - 1) * subsize;
+
+        central2d_t* copied_sim = (central2d_t*) malloc(sizeof(central2d_t));
+        copied_sim->nx = sim->nx; // nx should be the same
+        copied_sim->ny = new_ny;
+        copied_sim->ng = sim->ng; // Number of ghost cells must be the same for boundary condition
+        copied_sim->nfield = sim->nfield; 
+        copied_sim->dx = sim->dx; // Grid size in x
+        copied_sim->dy = sim->dy;
+        copied_sim->flux = sim->flux; 
+        copied_sim->speed = sim->speed; 
+        copied_sim->cfl = sim->cfl; // CFL prefix coefficient
+
+        int nx_all = copied_sim->nx + 2*copied_sim->ng; // ghost cells on each side to avoid sync
+        int ny_all = copied_sim->ny + 2*copied_sim->ng;
+        int nc = nx_all * ny_all; // entire domain subspace including ghost cells on each sides
+        int N  = copied_sim->nfield * nc; // how many entries for each vector
+        copied_sim->u  = (float*) malloc((4*N + 6*nx_all)* sizeof(float)); // new space for u
+        copied_sim->v  = copied_sim->u + N;
+        copied_sim->f  = copied_sim->u + 2*N;
+        copied_sim->g  = copied_sim->u + 3*N;
+        copied_sim->scratch = copied_sim->u + 4*N;
+        // Stride and number per field
+        int start_index = index*subsize*nx_all; // Starting from the index subdomain with the first ghost cell block considered (the ghost cell will be included)
+        int Nc = nx_all * (sim->ny + 2*sim->ng);
+        for (int k = 0; k < copied_sim->nfield; k++){
+            memcpy(copied_sim->u + nc*k, sim->u+start_index + Nc*k, nc);
+            memcpy(copied_sim->v + nc*k, sim->v+start_index + Nc*k, nc);
+            memcpy(copied_sim->f + nc*k, sim->f+start_index + Nc*k, nc);
+            memcpy(copied_sim->g + nc*k, sim->g+start_index + Nc*k, nc);
+        } // Copy all the memory for subdomain
+        return copied_sim;
+}
+
+void sync_subdomain(float* restrict u, float* restrict u_sub, int nx, int Ny, int ny, int ng, int nfield, int index, int ndomain){
+        int nx_all = nx + 2*ng;
+        int ny_all = ny + 2*ng;
+        int nc = nx_all * ny_all;
+        int Nc = nx_all * (Ny + 2*ng);
+        int subsize = ceil(nx / ndomain); // This should be ny, but for this special case, nx=ny
+        int start_index = (index*subsize + ng)*nx_all;
+        int sub_start = ng*nx;
+        for (int k = 0; k < nfield; k++){
+                memcpy(u + start_index + Nc*k, u_sub + sub_start + nc*k, nx_all*ny);
+        } // Copy the real data part back to the main grid.
 }

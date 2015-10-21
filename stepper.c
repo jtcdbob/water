@@ -349,7 +349,7 @@ void central2d_step(float* restrict u, float* restrict v,
                       nx_all, ny_all, nfield);
 
     // Copy from v storage back to main grid
-    memcpy(u, v, nfield*ny_all*nx_all*sizeof(float));
+    memcpy(u, v, nfield*ny_all*nx_all*sizeof(float)); // copy everything instead, do not update selectively
     //memcpy(u+(ng   )*nx_all+ng,
            //v+(ng-io)*nx_all+ng-io,
            //(nfield*ny_all-ng) * nx_all * sizeof(float));
@@ -414,8 +414,11 @@ void update_subdomain(float* restrict u_s, float* restrict u,
         int b = ny_sub*s, bg = 0;
         int t = ng*s, tg = (ny_sub+ng)*s; // I think this is correct?
 
+        int subsize = ceil(ny / ndomain); 
+        int start_index = (index*subsize)*s; // no ng because of the other index system we have
+        //printf("For processor %d/%d, the values are ny_sub = %d, start_index = %d, sub_start = %d \n", index, ndomain, ny_sub, start_index, sub_start);
         for (int k = 0; k < nfield; k++){
-                float* uk = u + k*field_stride;
+                float* uk = u + k*field_stride + start_index;
                 float* u_sk = u_s + k*sub_field_stride;
                 copy_subgrid(u_sk+lg, uk+l, ng, ny_sub + 2*ng, s);
                 copy_subgrid(u_sk+rg, uk+r, ng, ny_sub + 2*ng, s);
@@ -457,7 +460,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
 
     // Initialize the new subdomain vectors here.
 #ifdef _OPENMP
-    int num_threads_used = 1;
+    int num_threads_used = 2;
     omp_set_num_threads(num_threads_used);
 
     float* u_sub[num_threads_used];

@@ -5,6 +5,7 @@
 #include <math.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <omp.h>
 
 //ldoc on
 /**
@@ -17,6 +18,9 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
                             int nfield, flux_t flux, speed_t speed,
                             float cfl)
 {
+    // This should be an automatic update but I don't want to define global variable, change this in tuning!!!!
+    // The number of ghost celss should be 3*2*iter
+    // where iter is the number of iteration before sync in central2d_step()
     int ng = 18; // # of ghost cells
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
@@ -351,6 +355,39 @@ void central2d_step(float* restrict u, float* restrict v,
            //(nfield*ny_all-ng) * nx_all * sizeof(float));
 }
 
+// My subdomain copy function
+void copy_subdomain(float *u_s, float* v_s,
+                float* f_s, float* g_s, float* scratch_s,
+                int ny_sub, float* restrict u, int nx, int ny, int ng,
+                int nfield, int index, int ndomain){
+        int new_ny; // The size of subdomain
+        int subsize = ceil( ny / ndomain);
+        if(index < ndomain-1) new_ny = subsize;
+        else new_ny = ny - (ndomain-1)*subsize;
+        ny_sub = new_ny;
+
+        int nx_all = nx + 2*ng;
+        int ny_all = new_ny + 2*ng;
+        int nc = nx_all * ny_all;
+        int N = nfield * nc;
+        int start_index = index*subsize*nx_all;
+        int Nc = nx_all * (ny + 2*ng);
+        // Maybe use _mm_malloc for aligned memory block, suggestion for later
+        //u_s[index] = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
+        float* u_new = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
+        u_s = (float*)u_new;
+        v_s = u_new + N;
+        f_s = u_new + 2*N;
+        g_s = u_new + 3*N;
+        scratch_s = u_new + 4*N;
+
+        for (int k = 0; k < nfield; k++){
+                memcpy(u_s + nc*k, u + start_index + Nc*k, nc);
+                memcpy(v_s + nc*k, u + start_index + Nc*k, nc);
+                memcpy(f_s + nc*k, u + start_index + Nc*k, nc);
+                memcpy(g_s + nc*k, u + start_index + Nc*k, nc);
+        }
+}
 
 /**
  * ### Advance a fixed time
@@ -383,6 +420,23 @@ int central2d_xrun(float* restrict u, float* restrict v,
     int ny_all = ny + 2*ng;
     bool done = false;
     float t = 0;
+
+    // Initialize the new subdomain vectors here.
+#ifdef _OPENMP
+    int num_threads_used = 1;
+    omp_set_num_threads(num_threads_used);
+
+    // I think the initialization of freespace is better off outside, but whatever
+    float* u_sub[num_threads_used];
+    float* v_sub[num_threads_used];
+    float* f_sub[num_threads_used];
+    float* g_sub[num_threads_used];
+    float* scratch_sub[num_threads_used];
+    int ny_sub[num_threads_used];
+    for (int index = 0; index < num_threads_used; index++){
+            copy_subdomain(u_sub[index], v_sub[index], f_sub[index], g_sub[index], scratch_sub[index], ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
+    }
+#endif
     while (!done) {
         float cxy[2] = {1.0e-15f, 1.0e-15f};
         central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
@@ -410,6 +464,8 @@ int central2d_xrun(float* restrict u, float* restrict v,
             nstep += 2;
         }
     }
+    // Free the subdomain vectors.
+
     return nstep;
 }
 
@@ -475,3 +531,35 @@ void sync_subdomain(float* restrict u, float* restrict u_sub, int nx, int Ny, in
                 memcpy(u + start_index + Nc*k, u_sub + sub_start + nc*k, nx_all*ny);
         } // Copy the real data part back to the main grid.
 }
+//void copy_subdomain(float* *u_s, float* *v_s,
+//                float* *f_s, float* *g_s, float* *scratch_s,
+//               int* ny_sub, float* restrict u, int nx, int ny, int ng,
+//                int nfield, int index, int ndomain){
+//        int new_ny; // The size of subdomain
+//        int subsize = ceil( ny / ndomain);
+//        if(index < ndomain-1) new_ny = subsize;
+//        else new_ny = ny - (ndomain-1)*subsize;
+//        ny_sub[index] = new_ny;
+//
+//        int nx_all = nx + 2*ng;
+//        int ny_all = new_ny + 2*ng;
+//        int nc = nx_all * ny_all;
+//        int N = nfield * nc;
+//        int start_index = index*subsize*nx_all;
+//        int Nc = nx_all * (ny + 2*ng);
+//        // Maybe use _mm_malloc for aligned memory block, suggestion for later
+//        //u_s[index] = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
+//        float* u_new = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
+//        u_s[index] = (float*)u_new;
+//        v_s[index] = u_s[index] + N;
+//        f_s[index] = u_s[index] + 2*N;
+//        g_s[index] = u_s[index] + 3*N;
+//        scratch_s[index] = u_s[index] + 4*N;
+//
+//        for (int k = 0; k < nfield; k++){
+//                memcpy(u_s + nc*k, u + start_index + Nc*k, nc);
+//                memcpy(v_s + nc*k, u + start_index + Nc*k, nc);
+//                memcpy(f_s + nc*k, u + start_index + Nc*k, nc);
+//                memcpy(g_s + nc*k, u + start_index + Nc*k, nc);
+//        }
+//}

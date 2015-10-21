@@ -389,6 +389,20 @@ void copy_subdomain(float *u_s, float* v_s,
         }
 }
 
+void sync_subdomain(float* restrict u_s, float* u,
+                int ny_sub, int nx, int ny, int ng,
+                int nfield, int index, int ndomain){
+        int nx_all = nx + 2*ng;
+        int ny_all_sub = ny_sub + 2*ng;
+        int nc = nx_all * ny_all_sub;
+        int Nc = nx_all * (ny + 2*ng);
+        int subsize = ceil(ny / ndomain); 
+        int start_index = (index*subsize + ng)*nx_all;
+        int sub_start = ng*nx;
+        for (int k = 0; k < nfield; k++){
+                memcpy(u + start_index + Nc*k, u_s + sub_start + nc*k, nx_all*ny_sub);
+        } // Copy the real data part back to the main grid.
+}
 /**
  * ### Advance a fixed time
  *
@@ -436,7 +450,6 @@ int central2d_xrun(float* restrict u, float* restrict v,
     for (int index = 0; index < num_threads_used; index++){
             copy_subdomain(u_sub[index], v_sub[index], f_sub[index], g_sub[index], scratch_sub[index], ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
     }
-#endif
     while (!done) {
         float cxy[2] = {1.0e-15f, 1.0e-15f};
         central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
@@ -464,8 +477,40 @@ int central2d_xrun(float* restrict u, float* restrict v,
             nstep += 2;
         }
     }
+    // It seems to be automatically freed or something??
     // Free the subdomain vectors.
+    //for (int index = 0; index < num_threads_used; index++){
+            //free(u_sub[index]);
+    //}
+#else
+    while (!done) {
+        float cxy[2] = {1.0e-15f, 1.0e-15f};
+        central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
+        speed(cxy, u, nx_all * ny_all, nx_all * ny_all); // speed?
+        float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
 
+        // For loops
+        int it;
+        int iter = 3;
+        for(it = 0; it < iter; it ++){
+            if (t + 2*dt >= tfinal) {
+                dt = (tfinal-t)/2;
+                done = true;
+            }
+            central2d_step(u, v, scratch, f, g,
+                           0, nx, ny, ng,
+                           nfield, flux, speed,
+                           dt, dx, dy);
+            //central2d_periodic(u, nx, ny, ng, nfield);
+            central2d_step(u, v, scratch, f, g,
+                           1, nx, ny, ng,
+                           nfield, flux, speed,
+                           dt, dx, dy);
+            t += 2*dt;
+            nstep += 2;
+        }
+    }
+#endif
     return nstep;
 }
 
@@ -479,87 +524,55 @@ int central2d_run(central2d_t* sim, float tfinal)
                           tfinal, sim->dx, sim->dy, sim->cfl);
 }
 
-// My own function
-central2d_t* central2d_copy_subdomain(central2d_t* sim, int index, int ndomain)
-{
-        int new_ny; // The size of subdomain.
-        int subsize = ceil(sim->ny / ndomain);
-        if(index < ndomain - 1) new_ny = subsize;
-        else new_ny = sim->ny - (ndomain - 1) * subsize;
-
-        central2d_t* copied_sim = (central2d_t*) malloc(sizeof(central2d_t));
-        copied_sim->nx = sim->nx; // nx should be the same
-        copied_sim->ny = new_ny;
-        copied_sim->ng = sim->ng; // Number of ghost cells must be the same for boundary condition
-        copied_sim->nfield = sim->nfield; 
-        copied_sim->dx = sim->dx; // Grid size in x
-        copied_sim->dy = sim->dy;
-        copied_sim->flux = sim->flux; 
-        copied_sim->speed = sim->speed; 
-        copied_sim->cfl = sim->cfl; // CFL prefix coefficient
-
-        int nx_all = copied_sim->nx + 2*copied_sim->ng; // ghost cells on each side to avoid sync
-        int ny_all = copied_sim->ny + 2*copied_sim->ng;
-        int nc = nx_all * ny_all; // entire domain subspace including ghost cells on each sides
-        int N  = copied_sim->nfield * nc; // how many entries for each vector
-        copied_sim->u  = (float*) malloc((4*N + 6*nx_all)* sizeof(float)); // new space for u
-        copied_sim->v  = copied_sim->u + N;
-        copied_sim->f  = copied_sim->u + 2*N;
-        copied_sim->g  = copied_sim->u + 3*N;
-        copied_sim->scratch = copied_sim->u + 4*N;
-        // Stride and number per field
-        int start_index = index*subsize*nx_all; // Starting from the index subdomain with the first ghost cell block considered (the ghost cell will be included)
-        int Nc = nx_all * (sim->ny + 2*sim->ng);
-        for (int k = 0; k < copied_sim->nfield; k++){
-            memcpy(copied_sim->u + nc*k, sim->u+start_index + Nc*k, nc);
-            memcpy(copied_sim->v + nc*k, sim->v+start_index + Nc*k, nc);
-            memcpy(copied_sim->f + nc*k, sim->f+start_index + Nc*k, nc);
-            memcpy(copied_sim->g + nc*k, sim->g+start_index + Nc*k, nc);
-        } // Copy all the memory for subdomain
-        return copied_sim;
-}
-
-void sync_subdomain(float* restrict u, float* restrict u_sub, int nx, int Ny, int ny, int ng, int nfield, int index, int ndomain){
-        int nx_all = nx + 2*ng;
-        int ny_all = ny + 2*ng;
-        int nc = nx_all * ny_all;
-        int Nc = nx_all * (Ny + 2*ng);
-        int subsize = ceil(nx / ndomain); // This should be ny, but for this special case, nx=ny
-        int start_index = (index*subsize + ng)*nx_all;
-        int sub_start = ng*nx;
-        for (int k = 0; k < nfield; k++){
-                memcpy(u + start_index + Nc*k, u_sub + sub_start + nc*k, nx_all*ny);
-        } // Copy the real data part back to the main grid.
-}
-//void copy_subdomain(float* *u_s, float* *v_s,
-//                float* *f_s, float* *g_s, float* *scratch_s,
-//               int* ny_sub, float* restrict u, int nx, int ny, int ng,
-//                int nfield, int index, int ndomain){
-//        int new_ny; // The size of subdomain
-//        int subsize = ceil( ny / ndomain);
-//        if(index < ndomain-1) new_ny = subsize;
-//        else new_ny = ny - (ndomain-1)*subsize;
-//        ny_sub[index] = new_ny;
+// My own function (not in use)
+//central2d_t* central2d_copy_subdomain(central2d_t* sim, int index, int ndomain)
+//{
+//        int new_ny; // The size of subdomain.
+//        int subsize = ceil(sim->ny / ndomain);
+//        if(index < ndomain - 1) new_ny = subsize;
+//        else new_ny = sim->ny - (ndomain - 1) * subsize;
 //
+//        central2d_t* copied_sim = (central2d_t*) malloc(sizeof(central2d_t));
+//        copied_sim->nx = sim->nx; // nx should be the same
+//        copied_sim->ny = new_ny;
+//        copied_sim->ng = sim->ng; // Number of ghost cells must be the same for boundary condition
+//        copied_sim->nfield = sim->nfield; 
+//        copied_sim->dx = sim->dx; // Grid size in x
+//        copied_sim->dy = sim->dy;
+//        copied_sim->flux = sim->flux; 
+//        copied_sim->speed = sim->speed; 
+//        copied_sim->cfl = sim->cfl; // CFL prefix coefficient
+//
+//        int nx_all = copied_sim->nx + 2*copied_sim->ng; // ghost cells on each side to avoid sync
+//        int ny_all = copied_sim->ny + 2*copied_sim->ng;
+//        int nc = nx_all * ny_all; // entire domain subspace including ghost cells on each sides
+//        int N  = copied_sim->nfield * nc; // how many entries for each vector
+//        copied_sim->u  = (float*) malloc((4*N + 6*nx_all)* sizeof(float)); // new space for u
+//        copied_sim->v  = copied_sim->u + N;
+//        copied_sim->f  = copied_sim->u + 2*N;
+//        copied_sim->g  = copied_sim->u + 3*N;
+//        copied_sim->scratch = copied_sim->u + 4*N;
+//        // Stride and number per field
+//        int start_index = index*subsize*nx_all; // Starting from the index subdomain with the first ghost cell block considered (the ghost cell will be included)
+//        int Nc = nx_all * (sim->ny + 2*sim->ng);
+//        for (int k = 0; k < copied_sim->nfield; k++){
+//            memcpy(copied_sim->u + nc*k, sim->u+start_index + Nc*k, nc);
+//            memcpy(copied_sim->v + nc*k, sim->v+start_index + Nc*k, nc);
+//            memcpy(copied_sim->f + nc*k, sim->f+start_index + Nc*k, nc);
+//            memcpy(copied_sim->g + nc*k, sim->g+start_index + Nc*k, nc);
+//        } // Copy all the memory for subdomain
+//        return copied_sim;
+//}
+//
+//void sync_subdomain(float* restrict u, float* restrict u_sub, int nx, int Ny, int ny, int ng, int nfield, int index, int ndomain){
 //        int nx_all = nx + 2*ng;
-//        int ny_all = new_ny + 2*ng;
+//        int ny_all = ny + 2*ng;
 //        int nc = nx_all * ny_all;
-//        int N = nfield * nc;
-//        int start_index = index*subsize*nx_all;
-//        int Nc = nx_all * (ny + 2*ng);
-//        // Maybe use _mm_malloc for aligned memory block, suggestion for later
-//        //u_s[index] = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
-//        float* u_new = (float*) malloc((4*N + 6*nx_all)*sizeof(float));
-//        u_s[index] = (float*)u_new;
-//        v_s[index] = u_s[index] + N;
-//        f_s[index] = u_s[index] + 2*N;
-//        g_s[index] = u_s[index] + 3*N;
-//        scratch_s[index] = u_s[index] + 4*N;
-//
+//        int Nc = nx_all * (Ny + 2*ng);
+//        int subsize = ceil(nx / ndomain); // This should be ny, but for this special case, nx=ny
+//        int start_index = (index*subsize + ng)*nx_all;
+//        int sub_start = ng*nx;
 //        for (int k = 0; k < nfield; k++){
-//                memcpy(u_s + nc*k, u + start_index + Nc*k, nc);
-//                memcpy(v_s + nc*k, u + start_index + Nc*k, nc);
-//                memcpy(f_s + nc*k, u + start_index + Nc*k, nc);
-//                memcpy(g_s + nc*k, u + start_index + Nc*k, nc);
-//        }
+//                memcpy(u + start_index + Nc*k, u_sub + sub_start + nc*k, nx_all*ny);
+//        } // Copy the real data part back to the main grid.
 //}

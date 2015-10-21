@@ -398,10 +398,30 @@ void sync_subdomain(float* restrict u_s, float* restrict u,
         int subsize = ceil(ny / ndomain); 
         int start_index = (index*subsize + ng)*nx_all;
         int sub_start = ng*nx_all;
-        //for (int k = 0; k < nfield ; k++){
-        //        memcpy(u+start_index+Nc*k, u_s+sub_start+nc*k, nx_all*ny_sub*sizeof(float));
-        //} // Copy the real data part back to the main grid.
-        memcpy(u, u_s, 4*3*nx_all*ny_all_sub*sizeof(float));
+        for (int k = 0; k < nfield ; k++){
+                memcpy(u+start_index+Nc*k, u_s+sub_start+nc*k, nx_all*ny_sub*sizeof(float));
+        } // Copy the real data part back to the main grid.
+}
+void update_subdomain(float* restrict u_s, float* restrict u,
+                int ny_sub, int nx, int ny, int ng,
+                int nfield, int index, int ndomain){
+        int s = nx + 2*ng;
+        int field_stride = (ny+2*ng)*s;
+        int sub_field_stride = (ny_sub+2*ng)*s;
+        
+        int l = nx, lg = 0;
+        int r = ng, rg = nx+ng;
+        int b = ny_sub*s, bg = 0;
+        int t = ng*s, tg = (ny_sub+ng)*s; // I think this is correct?
+
+        for (int k = 0; k < nfield; k++){
+                float* uk = u + k*field_stride;
+                float* u_sk = u_s + k*sub_field_stride;
+                copy_subgrid(u_sk+lg, uk+l, ng, ny_sub + 2*ng, s);
+                copy_subgrid(u_sk+rg, uk+r, ng, ny_sub + 2*ng, s);
+                copy_subgrid(u_sk+tg, uk+t, nx + 2*ng, ng, s);
+                copy_subgrid(u_sk+bg, uk+b, nx + 2*ng, ng, s);
+        }
 }
 /**
  * ### Advance a fixed time
@@ -440,7 +460,6 @@ int central2d_xrun(float* restrict u, float* restrict v,
     int num_threads_used = 1;
     omp_set_num_threads(num_threads_used);
 
-    // I think the initialization of freespace is better off outside, but whatever
     float* u_sub[num_threads_used];
     float* v_sub[num_threads_used];
     float* f_sub[num_threads_used];
@@ -450,6 +469,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
     for (int index = 0; index < num_threads_used; index++){
             copy_subdomain( &u_sub[index], &v_sub[index], &f_sub[index], &g_sub[index], &scratch_sub[index], &ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
     }
+#pragma omp parallel
     while (!done) {
         float cxy[2] = {1.0e-15f, 1.0e-15f};
         central2d_periodic(u, nx, ny, ng, nfield); 
@@ -460,39 +480,18 @@ int central2d_xrun(float* restrict u, float* restrict v,
         int it;
         int iter = 3;
         int idx = omp_get_thread_num();
+        update_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
         for(it = 0; it < iter; it ++){
             if (t + 2*dt >= tfinal) {
                 dt = (tfinal-t)/2;
                 done = true;
             }
-
-            //central2d_step(u, v, scratch, f, g,
-            //               0, nx, ny, ng,
-            //               nfield, flux, speed,
-            //               dt, dx, dy);
-            ////central2d_periodic(u, nx, ny, ng, nfield);
-            //central2d_step(u, v, scratch, f, g,
-            //               1, nx, ny, ng,
-            //               nfield, flux, speed,
-            //               dt, dx, dy);
-            //central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
-            //               f_sub[idx], g_sub[idx],
-            //               0, nx, ny_sub[idx], ng,
-            //               nfield, flux, speed,
-            //               dt, dx, dy);
-            ////central2d_periodic(u, nx, ny, ng, nfield);
-            //central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
-            //               f_sub[idx], g_sub[idx],
-            //               1, nx, ny_sub[idx], ng,
-            //               nfield, flux, speed,
-            //               dt, dx, dy);
-            central2d_step(u, v_sub[idx], scratch_sub[idx],
+            central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
                            0, nx, ny_sub[idx], ng,
                            nfield, flux, speed,
                            dt, dx, dy);
-            //central2d_periodic(u, nx, ny, ng, nfield);
-            central2d_step(u, v_sub[idx], scratch_sub[idx],
+            central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
                            1, nx, ny_sub[idx], ng,
                            nfield, flux, speed,
@@ -500,10 +499,8 @@ int central2d_xrun(float* restrict u, float* restrict v,
             t += 2*dt;
             nstep += 2;
         }
-        //sync_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
+        sync_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
     }
-
-    // It seems to be automatically freed or something??
     // Free the subdomain vectors.
     for (int index = 0; index < num_threads_used; index++){
             free(u_sub[index]);
@@ -512,7 +509,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
     while (!done) {
         float cxy[2] = {1.0e-15f, 1.0e-15f};
         central2d_periodic(u, nx, ny, ng, nfield); // Apply periodic boundary condition
-        speed(cxy, u, nx_all * ny_all, nx_all * ny_all); // speed?
+        speed(cxy, u, nx_all * ny_all, nx_all * ny_all); 
         float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
 
         // For loops

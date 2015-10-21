@@ -331,20 +331,24 @@ void central2d_step(float* restrict u, float* restrict v,
                       nx_all, ny_all, nfield);
 
     // Flux values of f and g at half step
-    for (int iy = 1; iy < ny_all-1; ++iy) {
-        int jj = iy*nx_all+1;
-        flux(f+jj, g+jj, v+jj, nx_all-2, nx_all * ny_all);
-    }
+    //for (int iy = 1; iy < ny_all-1; ++iy) {
+    //    int jj = iy*nx_all+1;
+    //    flux(f+jj, g+jj, v+jj, nx_all-2, nx_all * ny_all);
+    //}
+    flux(f, g, v, nx_all * ny_all, nx_all * ny_all);
 
     central2d_correct(v, scratch, u, f, g, dtcdx2, dtcdy2,
-                      ng-io, nx+ng-io,
-                      ng-io, ny+ng-io,
+                      1, nx+2*ng-1,
+                      1, ny+2*ng-1,
+                      //ng-io, nx+ng-io,
+                      //ng-io, ny+ng-io,
                       nx_all, ny_all, nfield);
 
     // Copy from v storage back to main grid
-    memcpy(u+(ng   )*nx_all+ng,
-           v+(ng-io)*nx_all+ng-io,
-           (nfield*ny_all-ng) * nx_all * sizeof(float));
+    memcpy(u, v, nfield*ny_all*nx_all*sizeof(float));
+    //memcpy(u+(ng   )*nx_all+ng,
+           //v+(ng-io)*nx_all+ng-io,
+           //(nfield*ny_all-ng) * nx_all * sizeof(float));
 }
 
 

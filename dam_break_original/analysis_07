@@ -1,0 +1,30 @@
+Function                    Module        CPU Time  Spin Time  Overhead Time
+--------------------------  ------------  --------  ---------  -------------
+central2d_step              lshallow       19.835s         0s             0s
+central2d_derivs            lshallow       17.215s         0s             0s
+shallow2d_flux              lshallow        7.208s         0s             0s
+__intel_ssse3_rep_memcpy    lshallow        5.692s         0s             0s
+shallow2d_speed             lshallow        0.590s         0s             0s
+[Outside any known module]  [Unknown]       0.314s         0s             0s
+_IO_fwrite                  libc-2.12.so    0.246s         0s             0s
+_IO_file_xsputn             libc-2.12.so    0.211s         0s             0s
+run_sim                     lshallow        0.082s         0s             0s
+central2d_run               lshallow        0.045s         0s             0s
+luaV_execute                lshallow        0.044s         0s             0s
+fmaxf                       lshallow        0.036s         0s             0s
+fmaxf                       lshallow        0.033s         0s             0s
+fminf                       lshallow        0.023s         0s             0s
+fminf                       lshallow        0.017s         0s             0s
+lua_init_sim                lshallow        0.011s         0s             0s
+luaD_precall                lshallow        0.006s         0s             0s
+index2addr                  lshallow        0.005s         0s             0s
+lua_tonumberx               lshallow        0.005s         0s             0s
+luaV_tonumber_              lshallow        0.003s         0s             0s
+lua_callk                   lshallow        0.002s         0s             0s
+_IO_vfprintf                libc-2.12.so    0.001s         0s             0s
+__printf_fp                 libc-2.12.so    0.001s         0s             0s
+__strchr_sse2               libc-2.12.so    0.001s         0s             0s
+do_lookup_x                 ld-2.12.so      0.001s         0s             0s
+luaD_poscall                lshallow        0.001s         0s             0s
+luaV_lessthan               lshallow        0.001s         0s             0s
+lua_pushnumber              lshallow        0.001s         0s             0s

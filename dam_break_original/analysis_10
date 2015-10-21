@@ -1,0 +1,29 @@
+Function                    Module        CPU Time  Spin Time  Overhead Time
+--------------------------  ------------  --------  ---------  -------------
+central2d_step              lshallow       59.584s         0s             0s
+central2d_derivs            lshallow       51.034s         0s             0s
+shallow2d_flux              lshallow       28.602s         0s             0s
+__intel_ssse3_rep_memcpy    lshallow       24.790s         0s             0s
+shallow2d_speed             lshallow        2.742s         0s             0s
+[Outside any known module]  [Unknown]       0.874s         0s             0s
+_IO_fwrite                  libc-2.12.so    0.527s         0s             0s
+_IO_file_xsputn             libc-2.12.so    0.448s         0s             0s
+central2d_run               lshallow        0.212s         0s             0s
+run_sim                     lshallow        0.193s         0s             0s
+luaV_execute                lshallow        0.096s         0s             0s
+fminf                       lshallow        0.061s         0s             0s
+fmaxf                       lshallow        0.058s         0s             0s
+fmaxf                       lshallow        0.057s         0s             0s
+lua_init_sim                lshallow        0.028s         0s             0s
+fminf                       lshallow        0.027s         0s             0s
+luaD_precall                lshallow        0.015s         0s             0s
+luaD_call                   lshallow        0.007s         0s             0s
+luaD_poscall                lshallow        0.005s         0s             0s
+index2addr                  lshallow        0.004s         0s             0s
+luaV_tonumber_              lshallow        0.004s         0s             0s
+lua_pushnumber              lshallow        0.004s         0s             0s
+lua_tonumberx               lshallow        0.004s         0s             0s
+luaV_lessthan               lshallow        0.003s         0s             0s
+lua_callk                   lshallow        0.002s         0s             0s
+_dl_fixup                   ld-2.12.so      0.001s         0s             0s
+_dl_relocate_object         ld-2.12.so      0.001s         0s             0s

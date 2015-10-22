@@ -342,8 +342,8 @@ void central2d_step(float* restrict u, float* restrict v,
     flux(f, g, v, nx_all * ny_all, nx_all * ny_all);
 
     central2d_correct(v, scratch, u, f, g, dtcdx2, dtcdy2,
-                      1, nx+2*ng-1,
-                      1, ny+2*ng-1,
+                      1-io, nx+2*ng-io,
+                      1-io, ny+2*ng-io,
                       //ng-io, nx+ng-io,
                       //ng-io, ny+ng-io,
                       nx_all, ny_all, nfield);
@@ -398,6 +398,7 @@ void sync_subdomain(float* restrict u_s, float* restrict u,
         int subsize = ceil(ny / ndomain); 
         int start_index = (index*subsize + ng)*nx_all;
         int sub_start = ng*nx_all;
+        //printf("For processor %d/%d, the values are ny_sub = %d, start_index = %d, sub_start = %d \n", index, ndomain, ny_sub, start_index, sub_start);
         for (int k = 0; k < nfield ; k++){
                 memcpy(u+start_index+Nc*k, u_s+sub_start+nc*k, nx_all*ny_sub*sizeof(float));
         } // Copy the real data part back to the main grid.
@@ -416,7 +417,7 @@ void update_subdomain(float* restrict u_s, float* restrict u,
 
         int subsize = ceil(ny / ndomain); 
         int start_index = (index*subsize)*s; // no ng because of the other index system we have
-        //printf("For processor %d/%d, the values are ny_sub = %d, start_index = %d, sub_start = %d \n", index, ndomain, ny_sub, start_index, sub_start);
+        //printf("For processor %d/%d, the values are ny_sub = %d, start_index = %d\n", index, ndomain, ny_sub, start_index);
         for (int k = 0; k < nfield; k++){
                 float* uk = u + k*field_stride + start_index;
                 float* u_sk = u_s + k*sub_field_stride;

@@ -21,7 +21,7 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
     // This should be an automatic update but I don't want to define global variable, change this in tuning!!!!
     // The number of ghost celss should be 3*2*iter
     // where iter is the number of iteration before sync in central2d_step()
-    int ng = 4; // # of ghost cells
+    int ng = 12; // # of ghost cells ( 4*iter for laziness and safety)
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
     sim->nx = nx; // dimension size in x
@@ -461,7 +461,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
 
     // Initialize the new subdomain vectors here.
 #ifdef _OPENMP
-    int num_threads_used = 1;
+    int num_threads_used = 4;
     omp_set_num_threads(num_threads_used);
 
     float* u_sub[num_threads_used];
@@ -473,17 +473,20 @@ int central2d_xrun(float* restrict u, float* restrict v,
     for (int index = 0; index < num_threads_used; index++){
             copy_subdomain( &u_sub[index], &v_sub[index], &f_sub[index], &g_sub[index], &scratch_sub[index], &ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
     }
-#pragma omp parallel
+    float dt;
+#pragma omp parallel shared(dt)
     while (!done) {
+//#pragma omp single
         float cxy[2] = {1.0e-15f, 1.0e-15f};
         central2d_periodic(u, nx, ny, ng, nfield); 
         speed(cxy, u, nx_all * ny_all, nx_all * ny_all); 
-        float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
-
+        //float dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
+        dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
         // For loops
         int it;
-        int iter = 1;
+        int iter = 3;
         int idx = omp_get_thread_num();
+#pragma omp barrier
         update_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
         for(it = 0; it < iter; it ++){
             if (t + 2*dt >= tfinal) {
@@ -510,20 +513,22 @@ int central2d_xrun(float* restrict u, float* restrict v,
             //               1, nx, ny_sub[idx], ng,
             //               nfield, flux, speed,
             //               dt, dx, dy);
+            int ng_eff = 4 * (iter-1-it);
             central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
-                           0, nx+4, ny_sub[idx]+4, ng-2,
+                           0, nx+4+2*ng_eff, ny_sub[idx]+4+2*ng_eff, ng-2-ng_eff,
                            nfield, flux, speed,
                            dt, dx, dy);
             central2d_step(v_sub[idx], u_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
-                           1, nx, ny_sub[idx], ng,
+                           1, nx+2*ng_eff, ny_sub[idx]+2*ng_eff, ng-ng_eff,
                            nfield, flux, speed,
                            dt, dx, dy);
             t += 2*dt;
             nstep += 2;
         }
         sync_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
+#pragma omp barrier
     }
     // Free the subdomain vectors.
     for (int index = 0; index < num_threads_used; index++){

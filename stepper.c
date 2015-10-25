@@ -341,7 +341,7 @@ void central2d_step(float* restrict u, float* restrict v,
     //}
     flux(f, g, v, nx_all * ny_all, nx_all * ny_all);
 
-    central2d_correct(v, scratch, u, f, g, dtcdx2, dtcdy2,
+    central2d_correct(v + io*(nx_all+1), scratch, u, f, g, dtcdx2, dtcdy2,
                       1-io, nx+2*ng-io,
                       1-io, ny+2*ng-io,
                       //ng-io, nx+ng-io,
@@ -349,7 +349,7 @@ void central2d_step(float* restrict u, float* restrict v,
                       nx_all, ny_all, nfield);
 
     // Copy from v storage back to main grid
-    memcpy(u, v, nfield*ny_all*nx_all*sizeof(float)); // copy everything instead, do not update selectively
+    //memcpy(u, v, nfield*ny_all*nx_all*sizeof(float)); // copy everything instead, do not update selectively
     //memcpy(u+(ng   )*nx_all+ng,
            //v+(ng-io)*nx_all+ng-io,
            //(nfield*ny_all-ng) * nx_all * sizeof(float));
@@ -490,12 +490,22 @@ int central2d_xrun(float* restrict u, float* restrict v,
                 dt = (tfinal-t)/2;
                 done = true;
             }
+            //central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
+            //               f_sub[idx], g_sub[idx],
+            //               0, nx, ny_sub[idx], ng,
+            //               nfield, flux, speed,
+            //               dt, dx, dy);
+            //central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
+            //               f_sub[idx], g_sub[idx],
+            //               1, nx, ny_sub[idx], ng,
+            //               nfield, flux, speed,
+            //               dt, dx, dy);
             central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
                            0, nx, ny_sub[idx], ng,
                            nfield, flux, speed,
                            dt, dx, dy);
-            central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
+            central2d_step(v_sub[idx], u_sub[idx], scratch_sub[idx],
                            f_sub[idx], g_sub[idx],
                            1, nx, ny_sub[idx], ng,
                            nfield, flux, speed,

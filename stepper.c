@@ -410,10 +410,10 @@ void update_subdomain(float* restrict u_s, float* restrict u,
         int field_stride = (ny+2*ng)*s;
         int sub_field_stride = (ny_sub+2*ng)*s;
         
-        int l = nx, lg = 0;
-        int r = ng, rg = nx+ng;
-        int b = ny_sub*s, bg = 0;
-        int t = ng*s, tg = (ny_sub+ng)*s; // I think this is correct?
+        int l = 0, lg = 0;
+        int r = nx+ng, rg = nx+ng;
+        int b = (ny_sub+ng)*s, bg = (ny_sub+ng)*s;
+        int t = 0, tg = 0; // I think this is correct?
 
         int subsize = ceil(ny / ndomain); 
         int start_index = (index*subsize)*s; // no ng because of the other index system we have

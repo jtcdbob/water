@@ -21,7 +21,7 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
     // This should be an automatic update but I don't want to define global variable, change this in tuning!!!!
     // The number of ghost celss should be 3*2*iter
     // where iter is the number of iteration before sync in central2d_step()
-    int ng = 18; // # of ghost cells
+    int ng = 19; // # of ghost cells
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
     sim->nx = nx; // dimension size in x
@@ -382,9 +382,9 @@ void copy_subdomain(float ** u_s, float ** v_s,
 
         for (int k = 0; k < nfield; k++){
                 memcpy(*u_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
-                memcpy(*v_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
-                memcpy(*f_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
-                memcpy(*g_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
+                //memcpy(*v_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
+                //memcpy(*f_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
+                //memcpy(*g_s + nc*k, u + start_index + Nc*k, nc*sizeof(float));
         }
 }
 

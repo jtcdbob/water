@@ -461,7 +461,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
 
     // Initialize the new subdomain vectors here.
 #ifdef _OPENMP
-    int num_threads_used = 4;
+    int num_threads_used = 24;
     omp_set_num_threads(num_threads_used);
 
     float* u_sub[num_threads_used];
@@ -474,7 +474,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
             copy_subdomain( &u_sub[index], &v_sub[index], &f_sub[index], &g_sub[index], &scratch_sub[index], &ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
     }
     float dt;
-#pragma omp parallel shared(dt)
+#pragma omp parallel shared(dt, t)
     while (!done) {
 //#pragma omp single
         float cxy[2] = {1.0e-15f, 1.0e-15f};
@@ -524,6 +524,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
                            1, nx+2*ng_eff, ny_sub[idx]+2*ng_eff, ng-ng_eff,
                            nfield, flux, speed,
                            dt, dx, dy);
+#pragma omp single
             t += 2*dt;
             nstep += 2;
         }
@@ -549,13 +550,24 @@ int central2d_xrun(float* restrict u, float* restrict v,
                 dt = (tfinal-t)/2;
                 done = true;
             }
-            central2d_step(u, v, scratch, f, g,
-                           0, nx, ny, ng,
+            //central2d_step(u, v, scratch, f, g,
+            //               0, nx, ny, ng,
+            //               nfield, flux, speed,
+            //               dt, dx, dy);
+            ////central2d_periodic(u, nx, ny, ng, nfield);
+            //central2d_step(u, v, scratch, f, g,
+            //               1, nx, ny, ng,
+            //               nfield, flux, speed,
+            //               dt, dx, dy);
+            int ng_eff = 4 * (iter-1-it);
+            central2d_step(u_sub[idx], v_sub[idx], scratch_sub[idx],
+                           f_sub[idx], g_sub[idx],
+                           0, nx+4+2*ng_eff, ny_sub[idx]+4+2*ng_eff, ng-2-ng_eff,
                            nfield, flux, speed,
                            dt, dx, dy);
-            //central2d_periodic(u, nx, ny, ng, nfield);
-            central2d_step(u, v, scratch, f, g,
-                           1, nx, ny, ng,
+            central2d_step(v_sub[idx], u_sub[idx], scratch_sub[idx],
+                           f_sub[idx], g_sub[idx],
+                           1, nx+2*ng_eff, ny_sub[idx]+2*ng_eff, ng-ng_eff,
                            nfield, flux, speed,
                            dt, dx, dy);
             t += 2*dt;

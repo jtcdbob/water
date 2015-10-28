@@ -21,7 +21,7 @@ central2d_t* central2d_init(float w, float h, int nx, int ny,
     // This should be an automatic update but I don't want to define global variable, change this in tuning!!!!
     // The number of ghost celss should be 3*2*iter
     // where iter is the number of iteration before sync in central2d_step()
-    int ng = 12; // # of ghost cells ( 4*iter for laziness and safety)
+    int ng = 16; // # of ghost cells ( 4*iter for laziness and safety)
 
     central2d_t* sim = (central2d_t*) malloc(sizeof(central2d_t));
     sim->nx = nx; // dimension size in x
@@ -461,7 +461,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
 
     // Initialize the new subdomain vectors here.
 #ifdef _OPENMP
-    int num_threads_used = 24;
+    int num_threads_used = 4;
     omp_set_num_threads(num_threads_used);
 
     float* u_sub[num_threads_used];
@@ -474,7 +474,7 @@ int central2d_xrun(float* restrict u, float* restrict v,
             copy_subdomain( &u_sub[index], &v_sub[index], &f_sub[index], &g_sub[index], &scratch_sub[index], &ny_sub[index], u, nx, ny, ng, nfield, index, num_threads_used);
     }
     float dt;
-#pragma omp parallel shared(dt, t)
+#pragma omp parallel shared(dt,dt)
     while (!done) {
 //#pragma omp single
         float cxy[2] = {1.0e-15f, 1.0e-15f};
@@ -484,9 +484,9 @@ int central2d_xrun(float* restrict u, float* restrict v,
         dt = cfl / fmaxf(cxy[0]/dx, cxy[1]/dy);
         // For loops
         int it;
-        int iter = 3;
+        int iter = 4;
         int idx = omp_get_thread_num();
-#pragma omp barrier
+//#pragma omp barrier
         update_subdomain(u_sub[idx], u, ny_sub[idx], nx, ny, ng, nfield, idx, num_threads_used);
         for(it = 0; it < iter; it ++){
             if (t + 2*dt >= tfinal) {

@@ -7,9 +7,9 @@
 
 module load cs5220
 cd $PBS_O_WORKDIR
-for scale_num in {1..15}
+for scale_num in 2 4 8 16
 do
-        ./lshallow tests.lua dam $(($scale_num * 100)) > ./lshallow_run/lshallow_run_$(($scale_num * 100))
+        ./lshallow tests.lua dam $(($scale_num * 100)) > ./lshallow_run_$(($scale_num * 100))
 done
 
 #amplxe-cl -collect advanced-hotspots\
